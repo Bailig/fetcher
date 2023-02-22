@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUncheckedIndexedAccess": true,
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "inlineSources": false,
+    "isolatedModules": true,
+    "moduleResolution": "node",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "preserveWatchOutput": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "composite": true,
+    "lib": ["ESNext", "dom"],
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true
+  },
+  "include": ["src"]
+}
