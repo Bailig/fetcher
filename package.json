@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts --watch --format cjs,esm --dts"
+    "dev": "tsup src/index.ts --watch --format cjs,esm --dts",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [
     "fetch",
