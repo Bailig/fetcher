@@ -10,7 +10,8 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "vitest",
     "test": "vitest run",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "release": "pnpm build && changeset publish"
   },
   "keywords": [
     "fetch",
