@@ -57,7 +57,6 @@ export class FetcherClient<
       });
       return schema.parse(await response.json());
     };
-
     return get;
   };
 
