@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.0.5
+
+### Patch Changes
+
+- 511d8fc: update doc
+
 ## 0.0.4
 
 ### Patch Changes
