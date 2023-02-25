@@ -18,18 +18,9 @@ Zod is a peer dependency, so you will need to install that as well.
 import { FetcherClient } from "@bylg/fetcher";
 import { z } from "zod";
 
-const envSchema = z.enum(["staging", "production"]);
-
-type Env = z.infer<typeof envSchema>;
-
-const urlConfig = {
-  staging: "https://staging.example.com/",
-  production: "https://example.com/",
-} satisfies Record<Env, string>;
-
 const fetcherClient = new FetcherClient({
   ctx: z.object({
-    env: envSchema,
+    baseUrl: z.string().url(),
   }),
   headers: {
     Authorization: z.string().min(1),
@@ -37,7 +28,7 @@ const fetcherClient = new FetcherClient({
   fetchers: {
     getTodo: async ({ ctx, get }, id: string) => {
       const data = await get(
-        `${urlConfig[ctx.env]}/items/${id}`,
+        `${ctx.baseUrl}/items/${id}`,
         z.object({
           id: z.string(),
         })
@@ -46,7 +37,7 @@ const fetcherClient = new FetcherClient({
     },
     createTodo: async ({ ctx, post }, input: { content: string }) => {
       const data = await post(
-        `${urlConfig[ctx.env]}/items/`,
+        `${ctx.baseUrl}/items/`,
         z.object({
           id: z.string(),
           content: z.string(),
@@ -60,7 +51,7 @@ const fetcherClient = new FetcherClient({
 
 const todoFetcher = fetcherClient.createFetcher({
   ctx: {
-    env: "staging",
+    baseUrl: "https://example.com",
   },
   headers: { Authorization: "Bearer 123" },
 });
