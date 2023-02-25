@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.0.6
+
+### Patch Changes
+
+- def71f0: fix dist path
+
 ## 0.0.5
 
 ### Patch Changes
