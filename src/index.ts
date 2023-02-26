@@ -3,47 +3,42 @@ import type { ZodRawShape, ZodTypeAny } from "zod";
 
 type Fetch = typeof fetch;
 
-type Get = <Schema extends z.ZodTypeAny>(
+export type Get = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   options?: Parameters<Fetch>[1]
 ) => Promise<z.infer<Schema>>;
 
-type Post = <Schema extends z.ZodTypeAny>(
+export type Post = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   data?: any,
   options?: Parameters<Fetch>[1]
 ) => Promise<z.TypeOf<Schema>>;
 
+type FetcherDefinition<
+  TContextSchema extends ZodTypeAny,
+  THeadersShape extends ZodRawShape
+> = (
+  options: {
+    ctx: z.infer<TContextSchema>;
+    headers: InferZodRawShape<THeadersShape>;
+    get: Get;
+    post: Post;
+  },
+  input: any
+) => any;
+
 export class FetcherClient<
   TContextSchema extends ZodTypeAny,
-  THeadersShape extends ZodRawShape,
-  TFetchers extends Record<
-    string,
-    (
-      options: {
-        ctx: z.infer<TContextSchema>;
-        headers: InferZodRawShape<THeadersShape>;
-        get: Get;
-        post: Post;
-      },
-      input: any
-    ) => any
-  >
+  THeadersShape extends ZodRawShape
 > {
-  fetchers: TFetchers;
-  ctxSchema: TContextSchema;
-  headersShape: THeadersShape;
+  private ctxSchema: TContextSchema;
+  private headersShape: THeadersShape;
 
-  constructor(options: {
-    ctx: TContextSchema;
-    headers: THeadersShape;
-    fetchers: TFetchers;
-  }) {
+  constructor(options: { ctx: TContextSchema; headers: THeadersShape }) {
     this.ctxSchema = options.ctx;
     this.headersShape = options.headers;
-    this.fetchers = options.fetchers;
   }
 
   private createGet = (headers: InferZodRawShape<THeadersShape>): Get => {
@@ -79,26 +74,26 @@ export class FetcherClient<
     return post;
   };
 
-  createFetcher = (options: {
-    ctx: z.infer<TContextSchema>;
-    headers: InferZodRawShape<THeadersShape>;
-  }): MapFetchers<TFetchers> => {
-    const ctx = this.ctxSchema.parse(options.ctx);
-    const headerSchema = z.object(this.headersShape);
-    const headers = headerSchema.parse(options.headers) as any;
-    const get = this.createGet(headers);
-    const post = this.createPost(headers);
+  // createFetcher = (options: {
+  //   ctx: z.infer<TContextSchema>;
+  //   headers: InferZodRawShape<THeadersShape>;
+  // }): MapFetchers<TFetchers> => {
+  //   const ctx = this.ctxSchema.parse(options.ctx);
+  //   const headerSchema = z.object(this.headersShape);
+  //   const headers = headerSchema.parse(options.headers) as any;
+  //   const get = this.createGet(headers);
+  //   const post = this.createPost(headers);
 
-    const fetchers = Object.entries(this.fetchers).reduce(
-      (acc, [key, fetcher]) => {
-        acc[key] = (input: any) => fetcher({ ctx, headers, get, post }, input);
-        return acc;
-      },
-      {} as any
-    );
+  //   const fetchers = Object.entries(this.fetchers).reduce(
+  //     (acc, [key, fetcher]) => {
+  //       acc[key] = (input: any) => fetcher({ ctx, headers, get, post }, input);
+  //       return acc;
+  //     },
+  //     {} as any
+  //   );
 
-    return fetchers;
-  };
+  //   return fetchers;
+  // };
 }
 
 // type generics
