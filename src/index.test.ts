@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, expectTypeOf } from "vitest";
 import { z } from "zod";
-import {
-  FetcherClient,
-  FetcherDefinition,
-  Get,
-  MapFetchers,
-  Post,
-} from "./index";
+import { FetcherClient, Get, Post } from "./index";
 
 function createFetchResponse(data: any) {
   return { json: () => new Promise((resolve) => resolve(data)) };
@@ -43,9 +37,6 @@ const fetcher = createFetcher({
   ctx: "https://example.com",
   headers: { Authorization: "some-token" },
 });
-
-const todo = await fetcher.getTodo("1");
-const newTodo = await fetcher.createTodo("test");
 
 describe("fetcher()", () => {
   it("should infer ctx and headers types", () => {
@@ -85,11 +76,81 @@ describe("createFetcher()", () => {
 });
 
 describe("fetcher.getTodo()", () => {
-  it("should infer input and output types", async () => {
+  it("should infer input and output types", () => {
     type Input = Parameters<typeof fetcher.getTodo>[0];
     type Output = ReturnType<typeof fetcher.getTodo>;
 
     expectTypeOf<Input>().toEqualTypeOf<string>();
     expectTypeOf<Output>().toEqualTypeOf<Promise<string>>();
+  });
+
+  it("should call global.fetch with correct url and headers", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+
+    await fetcher.getTodo("1");
+    expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos/1", {
+      headers: { Authorization: "some-token" },
+    });
+  });
+
+  it("should return correct data", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+
+    expect(await fetcher.getTodo("1")).toEqual("test");
+  });
+
+  it("should throw error if response data shape is wrong", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(createFetchResponse({ content: "test" }));
+    expect(() => fetcher.getTodo("1")).rejects.toThrow();
+  });
+});
+
+describe("fetcher.createTodo()", () => {
+  it("should infer input and output types", () => {
+    type Input = Parameters<typeof fetcher.createTodo>[0];
+    type Output = ReturnType<typeof fetcher.createTodo>;
+
+    expectTypeOf<Input>().toEqualTypeOf<string>();
+    expectTypeOf<Output>().toEqualTypeOf<
+      Promise<{ id: string; content: string }>
+    >();
+  });
+
+  it("should call global.fetch with correct url and headers", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(createFetchResponse({ id: "1", content: "test" }));
+
+    await fetcher.createTodo("test");
+    expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos", {
+      headers: {
+        Authorization: "some-token",
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      method: "POST",
+      body: JSON.stringify({ content: "test" }),
+      cache: "no-cache",
+      referrerPolicy: "no-referrer",
+    });
+  });
+
+  it("should return correct data", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(createFetchResponse({ id: "1", content: "test" }));
+
+    expect(await fetcher.createTodo("test")).toEqual({
+      id: "1",
+      content: "test",
+    });
+  });
+
+  it("should throw error if response data shape is wrong", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(createFetchResponse({ content: "test" }));
+    expect(() => fetcher.createTodo("test")).rejects.toThrow();
   });
 });
