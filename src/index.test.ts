@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, expectTypeOf } from "vitest";
 import { z } from "zod";
-import { FetcherClient, Get, Post } from "./index";
+import {
+  FetcherClient,
+  FetcherDefinition,
+  Get,
+  MapFetchers,
+  Post,
+} from "./index";
 
 function createFetchResponse(data: any) {
   return { json: () => new Promise((resolve) => resolve(data)) };
@@ -64,5 +70,26 @@ describe("fetcher()", () => {
       get: Get;
       post: Post;
     }>();
+  });
+});
+
+describe("createFetcher()", () => {
+  it("should infer ctx and headers types", () => {
+    type Options = Pick<Parameters<typeof createFetcher>[0], "ctx" | "headers">;
+
+    expectTypeOf<Options>().toEqualTypeOf<{
+      ctx: string;
+      headers: { Authorization: string };
+    }>();
+  });
+});
+
+describe("fetcher.getTodo()", () => {
+  it("should infer input and output types", async () => {
+    type Input = Parameters<typeof fetcher.getTodo>[0];
+    type Output = ReturnType<typeof fetcher.getTodo>;
+
+    expectTypeOf<Input>().toEqualTypeOf<string>();
+    expectTypeOf<Output>().toEqualTypeOf<Promise<string>>();
   });
 });
