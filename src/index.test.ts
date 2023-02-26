@@ -13,6 +13,10 @@ const f = new FetcherClient({
   },
 });
 
+const getTodos = f.fetcher(({ ctx, get }) => {
+  return get(`${ctx}/todos`, z.array(z.string()));
+});
+
 const getTodo = f.fetcher(({ ctx, get }, id: string) => {
   return get(`${ctx}/todos/${id}`, z.string());
 });
@@ -29,6 +33,7 @@ const createTodo = f.fetcher(({ ctx, post }, content: string) => {
 });
 
 const createFetcher = f.combineFetchers({
+  getTodos,
   getTodo,
   createTodo,
 });
@@ -75,6 +80,24 @@ describe("createFetcher()", () => {
   });
 });
 
+describe("fetcher.getTodos()", () => {
+  it("should infer input and output types", () => {
+    type Params = Parameters<typeof fetcher.getTodos>;
+    type Output = ReturnType<typeof fetcher.getTodos>;
+
+    expectTypeOf<Params>().toEqualTypeOf<[]>();
+    expectTypeOf<Output>().toEqualTypeOf<Promise<string[]>>();
+  });
+
+  it("should call global.fetch with correct url and headers", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse(["test"]));
+    await fetcher.getTodos();
+    expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos", {
+      headers: { Authorization: "some-token" },
+    });
+  });
+});
+
 describe("fetcher.getTodo()", () => {
   it("should infer input and output types", () => {
     type Input = Parameters<typeof fetcher.getTodo>[0];
@@ -108,7 +131,7 @@ describe("fetcher.getTodo()", () => {
 });
 
 describe("fetcher.createTodo()", () => {
-  it("should infer input and output types", () => {
+  it("should infer inputs and output types", () => {
     type Input = Parameters<typeof fetcher.createTodo>[0];
     type Output = ReturnType<typeof fetcher.createTodo>;
 

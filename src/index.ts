@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ZodRawShape, ZodTypeAny } from "zod";
 
-type Fetch = typeof fetch;
+export type Fetch = typeof fetch;
 
 export type Get = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
@@ -19,17 +19,19 @@ export type Post = <Schema extends z.ZodTypeAny>(
 export type FetcherDefinition<
   TContextSchema extends ZodTypeAny,
   THeadersShape extends ZodRawShape,
-  Input = any,
-  Output = any
-> = (
-  options: {
-    ctx: z.infer<TContextSchema>;
-    headers: InferZodRawShape<THeadersShape>;
-    get: Get;
-    post: Post;
-  },
-  input: Input
-) => Output;
+  TInputs extends any[] = any[],
+  TOutput = any
+> = ArrayShorterThanTwo<TInputs> extends true
+  ? (
+      options: {
+        ctx: z.infer<TContextSchema>;
+        headers: InferZodRawShape<THeadersShape>;
+        get: Get;
+        post: Post;
+      },
+      ...inputs: TInputs
+    ) => TOutput
+  : "Inputs must be 0 or 1";
 
 export class FetcherClient<
   TContextSchema extends ZodTypeAny,
@@ -76,11 +78,11 @@ export class FetcherClient<
     return post;
   };
 
-  fetcher<TInput, TOutput>(
+  fetcher<TInputs extends any[], TOutput>(
     fetcherDefinition: FetcherDefinition<
       TContextSchema,
       THeadersShape,
-      TInput,
+      TInputs,
       TOutput
     >
   ) {
@@ -125,8 +127,20 @@ export type InferZodRawShape<T extends ZodRawShape> = {
 export type MapFetchers<Fetchers extends Record<string, any>> = {
   [K in keyof Fetchers]: Fetchers[K] extends (
     options: any,
-    input: infer Input
+    ...inputs: infer Inputs
   ) => infer Output
-    ? (input: Input) => Output
+    ? (...inputs: Inputs) => Output
     : never;
 };
+
+type ArrayShorterThanTwo<T extends any[]> = T extends [
+  infer A,
+  infer B,
+  ...infer Rest
+]
+  ? false
+  : T extends [infer A]
+  ? true
+  : T extends []
+  ? true
+  : never;
