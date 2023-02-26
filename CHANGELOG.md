@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.1.0
+
+### Minor Changes
+
+- f23a86d: created new interface
+
 ## 0.0.6
 
 ### Patch Changes
