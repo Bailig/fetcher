@@ -40,3 +40,29 @@ const fetcher = createFetcher({
 
 const todo = await fetcher.getTodo("1");
 const newTodo = await fetcher.createTodo("test");
+
+describe("fetcher()", () => {
+  it("should infer ctx and headers types", () => {
+    type Options = Pick<
+      Parameters<Parameters<typeof f.fetcher>[0]>[0],
+      "ctx" | "headers"
+    >;
+
+    expectTypeOf<Options>().toEqualTypeOf<{
+      ctx: string;
+      headers: { Authorization: string };
+    }>();
+  });
+
+  it("should pass get and post types", () => {
+    type Options = Pick<
+      Parameters<Parameters<typeof f.fetcher>[0]>[0],
+      "get" | "post"
+    >;
+
+    expectTypeOf<Options>().toEqualTypeOf<{
+      get: Get;
+      post: Post;
+    }>();
+  });
+});

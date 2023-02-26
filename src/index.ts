@@ -74,6 +74,10 @@ export class FetcherClient<
     return post;
   };
 
+  fetcher(fetcherDefinition: FetcherDefinition<TContextSchema, THeadersShape>) {
+    return fetcherDefinition;
+  }
+
   // createFetcher = (options: {
   //   ctx: z.infer<TContextSchema>;
   //   headers: InferZodRawShape<THeadersShape>;
