@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.1.1
+
+### Patch Changes
+
+- 57e1614: update readme
+
 ## 0.1.0
 
 ### Minor Changes
