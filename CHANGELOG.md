@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.1.2
+
+### Patch Changes
+
+- 998f2e1: fix type when no input
+
 ## 0.1.1
 
 ### Patch Changes
