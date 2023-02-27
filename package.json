@@ -1,6 +1,6 @@
 {
   "name": "@bylg/fetcher",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A small wrapper around fetch and Zod. It allows you to predefine headers and context and have a type-safe response.",
   "private": false,
   "main": "dist/index.js",
