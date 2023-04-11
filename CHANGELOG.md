@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.1.4
+
+### Patch Changes
+
+- 83f68db: allow opptional headers
+
 ## 0.1.3
 
 ### Patch Changes
