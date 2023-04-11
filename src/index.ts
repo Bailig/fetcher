@@ -23,14 +23,14 @@ export type FetcherDefinition<
   TOutput = any
 > = ArrayShorterThanTwo<TInputs> extends true
   ? (
-      options: {
-        ctx: z.infer<TContextSchema>;
-        headers: InferZodRawShape<THeadersShape>;
-        get: Get;
-        post: Post;
-      },
-      ...inputs: TInputs
-    ) => TOutput
+    options: {
+      ctx: z.infer<TContextSchema>;
+      headers: InferZodRawShape<THeadersShape>;
+      get: Get;
+      post: Post;
+    },
+    ...inputs: TInputs
+  ) => TOutput
   : "Inputs must be 0 or 1";
 
 export class FetcherClient<
@@ -38,14 +38,14 @@ export class FetcherClient<
   THeadersShape extends ZodRawShape
 > {
   private ctxSchema: TContextSchema;
-  private headersShape: THeadersShape;
+  private headersShape?: THeadersShape;
 
-  constructor(options: { ctx: TContextSchema; headers: THeadersShape }) {
+  constructor(options: { ctx: TContextSchema; headers?: THeadersShape }) {
     this.ctxSchema = options.ctx;
     this.headersShape = options.headers;
   }
 
-  private createGet = (headers: InferZodRawShape<THeadersShape>): Get => {
+  private createGet = (headers?: InferZodRawShape<THeadersShape>): Get => {
     const get: Get = async (url, schema, options) => {
       const response = await fetch(url, {
         ...options,
@@ -100,8 +100,11 @@ export class FetcherClient<
       headers: InferZodRawShape<THeadersShape>;
     }): MapFetchers<TFetchers> => {
       const ctx = this.ctxSchema.parse(options.ctx);
-      const headerSchema = z.object(this.headersShape);
-      const headers = headerSchema.parse(options.headers) as any;
+
+      const headers: any = this.headersShape
+        ? z.object(this.headersShape).parse(options.headers)
+        : undefined;
+
       const get = this.createGet(headers);
       const post = this.createPost(headers);
 
@@ -129,8 +132,8 @@ export type MapFetchers<Fetchers extends Record<string, any>> = {
     options: any,
     ...inputs: infer Inputs
   ) => infer Output
-    ? (...inputs: Inputs) => Output
-    : never;
+  ? (...inputs: Inputs) => Output
+  : never;
 };
 
 type ArrayShorterThanTwo<T extends any[]> = T extends [
