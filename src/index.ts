@@ -23,14 +23,14 @@ export type FetcherDefinition<
   TOutput = any
 > = ArrayShorterThanTwo<TInputs> extends true
   ? (
-    options: {
-      ctx: z.infer<TContextSchema>;
-      headers: InferZodRawShape<THeadersShape>;
-      get: Get;
-      post: Post;
-    },
-    ...inputs: TInputs
-  ) => TOutput
+      options: {
+        ctx: z.infer<TContextSchema>;
+        headers: InferZodRawShape<THeadersShape>;
+        get: Get;
+        post: Post;
+      },
+      ...inputs: TInputs
+    ) => TOutput
   : "Inputs must be 0 or 1";
 
 export class FetcherClient<
@@ -132,8 +132,8 @@ export type MapFetchers<Fetchers extends Record<string, any>> = {
     options: any,
     ...inputs: infer Inputs
   ) => infer Output
-  ? (...inputs: Inputs) => Output
-  : never;
+    ? (...inputs: Inputs) => Output
+    : never;
 };
 
 type ArrayShorterThanTwo<T extends any[]> = T extends [
