@@ -177,3 +177,35 @@ describe("fetcher.createTodo()", () => {
     expect(() => fetcher.createTodo("test")).rejects.toThrow();
   });
 });
+
+describe("FetcherClient optional headers", () => {
+  it("should allow optional headers", () => {
+    new FetcherClient({
+      ctx: z.string().url(),
+    });
+  });
+
+  it("should allow optional headers in createFetcher", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+
+    const f = new FetcherClient({
+      ctx: z.string().url(),
+    });
+
+    const getNoHeaderTodo = f.fetcher(({ ctx, get }, id: string) => {
+      return get(`${ctx}/todos/${id}`, z.string());
+    });
+
+    const createNoHeaderFetchers = f.combineFetchers({
+      getNoHeaderTodo,
+    });
+
+    const fetchers = createNoHeaderFetchers({
+      ctx: "https://example.com",
+    });
+
+    const result = await fetchers.getNoHeaderTodo("1");
+
+    expect(result).toEqual("test");
+  });
+});

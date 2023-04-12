@@ -18,65 +18,46 @@ export type Post = <Schema extends z.ZodTypeAny>(
 
 export type FetcherDefinition<
   TContextSchema extends ZodTypeAny,
-  THeadersShape extends ZodRawShape,
+  THeadersShape extends ZodRawShape | undefined,
   TInputs extends any[] = any[],
   TOutput = any
 > = ArrayShorterThanTwo<TInputs> extends true
   ? (
-      options: {
-        ctx: z.infer<TContextSchema>;
-        headers: InferZodRawShape<THeadersShape>;
-        get: Get;
-        post: Post;
-      },
+      options: THeadersShape extends ZodRawShape
+        ? {
+            ctx: z.infer<TContextSchema>;
+            get: Get;
+            post: Post;
+            headers: InferZodRawShape<THeadersShape>;
+          }
+        : {
+            ctx: z.infer<TContextSchema>;
+            get: Get;
+            post: Post;
+          },
       ...inputs: TInputs
     ) => TOutput
   : "Inputs must be 0 or 1";
 
 export class FetcherClient<
-  TContextSchema extends ZodTypeAny,
-  THeadersShape extends ZodRawShape
+  TOptions extends
+    | { ctx: ZodTypeAny }
+    | { ctx: ZodTypeAny; headers: ZodRawShape },
+  TContextSchema extends TOptions["ctx"],
+  THeadersShape extends TOptions extends { headers: ZodRawShape }
+    ? TOptions["headers"]
+    : undefined
 > {
   private ctxSchema: TContextSchema;
   private headersShape?: THeadersShape;
 
-  constructor(options: { ctx: TContextSchema; headers?: THeadersShape }) {
-    this.ctxSchema = options.ctx;
-    this.headersShape = options.headers;
+  constructor(options: TOptions) {
+    this.ctxSchema = options.ctx as TContextSchema;
+
+    if ("headers" in options) {
+      this.headersShape = options.headers as THeadersShape;
+    }
   }
-
-  private createGet = (headers?: InferZodRawShape<THeadersShape>): Get => {
-    const get: Get = async (url, schema, options) => {
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...headers,
-          ...options?.headers,
-        },
-      });
-      return schema.parse(await response.json());
-    };
-    return get;
-  };
-
-  private createPost = (headers: InferZodRawShape<THeadersShape>): Post => {
-    const post: Post = async (url, schema, data, options) => {
-      const response = await fetch(url, {
-        method: "POST",
-        cache: "no-cache",
-        referrerPolicy: "no-referrer",
-        body: JSON.stringify(data),
-        ...options,
-        headers: {
-          "Content-Type": "application/json; charset=UTF-8",
-          ...headers,
-          ...options?.headers,
-        },
-      });
-      return schema.parse(await response.json());
-    };
-    return post;
-  };
 
   fetcher<TInputs extends any[], TOutput>(
     fetcherDefinition: FetcherDefinition<
@@ -95,15 +76,22 @@ export class FetcherClient<
       FetcherDefinition<TContextSchema, THeadersShape>
     >
   >(fetcherDefs: TFetchers) {
-    return (options: {
-      ctx: z.infer<TContextSchema>;
-      headers: InferZodRawShape<THeadersShape>;
-    }): MapFetchers<TFetchers> => {
+    return (
+      options: THeadersShape extends ZodRawShape
+        ? {
+            ctx: z.infer<TContextSchema>;
+            headers: InferZodRawShape<THeadersShape>;
+          }
+        : {
+            ctx: z.infer<TContextSchema>;
+          }
+    ): MapFetchers<TFetchers> => {
       const ctx = this.ctxSchema.parse(options.ctx);
 
-      const headers: any = this.headersShape
-        ? z.object(this.headersShape).parse(options.headers)
-        : undefined;
+      const headers: any =
+        this.headersShape && "headers" in options
+          ? z.object(this.headersShape).parse(options.headers)
+          : undefined;
 
       const get = this.createGet(headers);
       const post = this.createPost(headers);
@@ -111,7 +99,7 @@ export class FetcherClient<
       const fetchers = Object.entries(fetcherDefs).reduce(
         (acc, [key, fetcher]) => {
           acc[key] = (input: any) =>
-            fetcher({ ctx, headers, get, post }, input);
+            fetcher({ ctx, headers, get, post } as any, input);
           return acc;
         },
         {} as any
@@ -120,6 +108,47 @@ export class FetcherClient<
       return fetchers;
     };
   }
+
+  private createGet = (
+    headers: THeadersShape extends never
+      ? never
+      : InferZodRawShape<NonNullable<THeadersShape>>
+  ): Get => {
+    const get: Get = async (url, schema, options) => {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...headers,
+          ...options?.headers,
+        },
+      });
+      return schema.parse(await response.json());
+    };
+    return get;
+  };
+
+  private createPost = (
+    headers: THeadersShape extends unknown
+      ? unknown
+      : InferZodRawShape<NonNullable<THeadersShape>>
+  ): Post => {
+    const post: Post = async (url, schema, data, options) => {
+      const response = await fetch(url, {
+        method: "POST",
+        cache: "no-cache",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(data),
+        ...options,
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          ...(headers as any),
+          ...options?.headers,
+        },
+      });
+      return schema.parse(await response.json());
+    };
+    return post;
+  };
 }
 
 // type generics
