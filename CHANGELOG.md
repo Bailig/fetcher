@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.1.5
+
+### Patch Changes
+
+- 853f405: fix optional headers type
+
 ## 0.1.4
 
 ### Patch Changes
