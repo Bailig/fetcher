@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, expectTypeOf } from "vitest";
 import { z } from "zod";
-import { FetcherClient, Get, Post } from "./index";
+import { FetcherClient, Query, Mutation } from "./index";
 
 function createFetchResponse(data: any) {
   return { json: () => new Promise((resolve) => resolve(data)) };
@@ -63,8 +63,8 @@ describe("fetcher()", () => {
     >;
 
     expectTypeOf<Options>().toEqualTypeOf<{
-      get: Get;
-      post: Post;
+      get: Query;
+      post: Mutation;
     }>();
   });
 });
@@ -94,6 +94,7 @@ describe("fetcher.getTodos()", () => {
     await fetcher.getTodos();
     expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos", {
       headers: { Authorization: "some-token" },
+      referrerPolicy: "no-referrer",
     });
   });
 });
@@ -113,6 +114,7 @@ describe("fetcher.getTodo()", () => {
     await fetcher.getTodo("1");
     expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos/1", {
       headers: { Authorization: "some-token" },
+      referrerPolicy: "no-referrer",
     });
   });
 

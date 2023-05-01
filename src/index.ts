@@ -3,13 +3,13 @@ import type { ZodRawShape, ZodTypeAny } from "zod";
 
 export type Fetch = typeof fetch;
 
-export type Get = <Schema extends z.ZodTypeAny>(
+export type Query = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   options?: Parameters<Fetch>[1]
 ) => Promise<z.infer<Schema>>;
 
-export type Post = <Schema extends z.ZodTypeAny>(
+export type Mutation = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   data?: any,
@@ -26,14 +26,20 @@ export type FetcherDefinition<
       options: THeadersShape extends ZodRawShape
         ? {
             ctx: z.infer<TContextSchema>;
-            get: Get;
-            post: Post;
+            get: Query;
+            post: Mutation;
+            patch: Mutation;
+            put: Mutation;
+            delete: Mutation;
             headers: InferZodRawShape<THeadersShape>;
           }
         : {
             ctx: z.infer<TContextSchema>;
-            get: Get;
-            post: Post;
+            get: Query;
+            post: Mutation;
+            patch: Mutation;
+            put: Mutation;
+            delete: Mutation;
           },
       ...inputs: TInputs
     ) => TOutput
@@ -95,11 +101,17 @@ export class FetcherClient<
 
       const get = this.createGet(headers);
       const post = this.createPost(headers);
+      const patch = this.createPatch(headers);
+      const put = this.createPut(headers);
+      const del = this.createDelete(headers);
 
       const fetchers = Object.entries(fetcherDefs).reduce(
         (acc, [key, fetcher]) => {
           acc[key] = (input: any) =>
-            fetcher({ ctx, headers, get, post } as any, input);
+            fetcher(
+              { ctx, headers, get, post, patch, put, delete: del } as any,
+              input
+            );
           return acc;
         },
         {} as any
@@ -113,9 +125,10 @@ export class FetcherClient<
     headers: THeadersShape extends never
       ? never
       : InferZodRawShape<NonNullable<THeadersShape>>
-  ): Get => {
-    const get: Get = async (url, schema, options) => {
+  ): Query => {
+    const get: Query = async (url, schema, options) => {
       const response = await fetch(url, {
+        referrerPolicy: "no-referrer",
         ...options,
         headers: {
           ...headers,
@@ -131,8 +144,8 @@ export class FetcherClient<
     headers: THeadersShape extends unknown
       ? unknown
       : InferZodRawShape<NonNullable<THeadersShape>>
-  ): Post => {
-    const post: Post = async (url, schema, data, options) => {
+  ): Mutation => {
+    const post: Mutation = async (url, schema, data, options) => {
       const response = await fetch(url, {
         method: "POST",
         cache: "no-cache",
@@ -148,6 +161,74 @@ export class FetcherClient<
       return schema.parse(await response.json());
     };
     return post;
+  };
+
+  private createPatch = (
+    headers: THeadersShape extends unknown
+      ? unknown
+      : InferZodRawShape<NonNullable<THeadersShape>>
+  ): Mutation => {
+    const patch: Mutation = async (url, schema, data, options) => {
+      const response = await fetch(url, {
+        method: "PATCH",
+        cache: "no-cache",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(data),
+        ...options,
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          ...(headers as any),
+          ...options?.headers,
+        },
+      });
+      return schema.parse(await response.json());
+    };
+    return patch;
+  };
+
+  private createPut = (
+    headers: THeadersShape extends unknown
+      ? unknown
+      : InferZodRawShape<NonNullable<THeadersShape>>
+  ): Mutation => {
+    const put: Mutation = async (url, schema, data, options) => {
+      const response = await fetch(url, {
+        method: "PUT",
+        cache: "no-cache",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(data),
+        ...options,
+        headers: {
+          "Content-Type": "application/json; charset=UTF-8",
+          ...(headers as any),
+          ...options?.headers,
+        },
+      });
+      return schema.parse(await response.json());
+    };
+    return put;
+  };
+
+  private createDelete = (
+    headers: THeadersShape extends unknown
+      ? unknown
+      : InferZodRawShape<NonNullable<THeadersShape>>
+  ): Mutation => {
+    const del: Mutation = async (url, schema, data, options) => {
+      const response = await fetch(url, {
+        method: "DELETE",
+        cache: "no-cache",
+        referrerPolicy: "no-referrer",
+        body: JSON.stringify(data),
+        ...options,
+        headers: {
+          ...(headers as any),
+          ...options?.headers,
+        },
+      });
+      return schema.parse(await response.json());
+    };
+    return del;
   };
 }
 
