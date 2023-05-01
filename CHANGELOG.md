@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.2.0
+
+### Minor Changes
+
+- bd3e6b6: added patch, put, and delete methods
+
 ## 0.1.5
 
 ### Patch Changes
