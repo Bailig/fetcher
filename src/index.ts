@@ -7,14 +7,14 @@ export type Query = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   options?: Parameters<Fetch>[1]
-) => Promise<z.infer<Schema>>;
+) => Promise<{ data: z.infer<Schema>; response: Response }>;
 
 export type Mutation = <Schema extends z.ZodTypeAny>(
   url: Parameters<Fetch>[0],
   schema: Schema,
   data?: any,
   options?: Parameters<Fetch>[1]
-) => Promise<z.TypeOf<Schema>>;
+) => Promise<{ data: z.infer<Schema>; response: Response }>;
 
 export type FetcherDefinition<
   TContextSchema extends ZodTypeAny,
@@ -135,7 +135,7 @@ export class FetcherClient<
           ...options?.headers,
         },
       });
-      return schema.parse(await response.json());
+      return { data: schema.parse(await response.json()), response };
     };
     return get;
   };
@@ -158,7 +158,7 @@ export class FetcherClient<
           ...options?.headers,
         },
       });
-      return schema.parse(await response.json());
+      return { data: schema.parse(await response.json()), response };
     };
     return post;
   };
@@ -181,7 +181,7 @@ export class FetcherClient<
           ...options?.headers,
         },
       });
-      return schema.parse(await response.json());
+      return { data: schema.parse(await response.json()), response };
     };
     return patch;
   };
@@ -204,7 +204,7 @@ export class FetcherClient<
           ...options?.headers,
         },
       });
-      return schema.parse(await response.json());
+      return { data: schema.parse(await response.json()), response };
     };
     return put;
   };
@@ -222,11 +222,12 @@ export class FetcherClient<
         body: JSON.stringify(data),
         ...options,
         headers: {
+          "Content-Type": "application/json; charset=UTF-8",
           ...(headers as any),
           ...options?.headers,
         },
       });
-      return schema.parse(await response.json());
+      return { data: schema.parse(await response.json()), response };
     };
     return del;
   };

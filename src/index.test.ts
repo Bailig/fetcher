@@ -2,8 +2,8 @@ import { describe, it, expect, vi, expectTypeOf } from "vitest";
 import { z } from "zod";
 import { FetcherClient, Query, Mutation } from "./index";
 
-function createFetchResponse(data: any) {
-  return { json: () => new Promise((resolve) => resolve(data)) };
+function createFetchResponse(data: any, status = 200) {
+  return { json: () => new Promise((resolve) => resolve(data)), status };
 }
 
 const f = new FetcherClient({
@@ -67,6 +67,29 @@ describe("fetcher()", () => {
       post: Mutation;
     }>();
   });
+
+  it("should get correct data and status when expected error occur", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(createFetchResponse({ error: "test" }, 404));
+
+    const schema = z.union([z.string(), z.object({ error: z.string() })]);
+    const getTodoWithExpectedError = f.fetcher(async ({ ctx, get }) => {
+      const { data, response } = await get(`${ctx}/todos/1`, schema);
+      expect(response.status).toEqual(404);
+      expect(data).toEqual({ error: "test" });
+      return "error";
+    });
+
+    const createFetcherWithExpectedError = f.combineFetchers({
+      getTodoWithExpectedError,
+    });
+    const fetcherWithExpectedError = createFetcherWithExpectedError({
+      ctx: "https://example.com",
+      headers: { Authorization: "some-token" },
+    });
+    await fetcherWithExpectedError.getTodoWithExpectedError();
+  });
 });
 
 describe("createFetcher()", () => {
@@ -86,7 +109,9 @@ describe("fetcher.getTodos()", () => {
     type Output = ReturnType<typeof fetcher.getTodos>;
 
     expectTypeOf<Params>().toEqualTypeOf<[]>();
-    expectTypeOf<Output>().toEqualTypeOf<Promise<string[]>>();
+    expectTypeOf<Output>().toEqualTypeOf<
+      Promise<{ data: string[]; response: Response }>
+    >();
   });
 
   it("should call global.fetch with correct url and headers", async () => {
@@ -105,7 +130,9 @@ describe("fetcher.getTodo()", () => {
     type Output = ReturnType<typeof fetcher.getTodo>;
 
     expectTypeOf<Input>().toEqualTypeOf<string>();
-    expectTypeOf<Output>().toEqualTypeOf<Promise<string>>();
+    expectTypeOf<Output>().toEqualTypeOf<
+      Promise<{ data: string; response: Response }>
+    >();
   });
 
   it("should call global.fetch with correct url and headers", async () => {
@@ -121,7 +148,7 @@ describe("fetcher.getTodo()", () => {
   it("should return correct data", async () => {
     global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
 
-    expect(await fetcher.getTodo("1")).toEqual("test");
+    expect((await fetcher.getTodo("1")).data).toEqual("test");
   });
 
   it("should throw error if response data shape is wrong", async () => {
@@ -139,7 +166,7 @@ describe("fetcher.createTodo()", () => {
 
     expectTypeOf<Input>().toEqualTypeOf<string>();
     expectTypeOf<Output>().toEqualTypeOf<
-      Promise<{ id: string; content: string }>
+      Promise<{ data: { id: string; content: string }; response: Response }>
     >();
   });
 
@@ -166,7 +193,7 @@ describe("fetcher.createTodo()", () => {
       .fn()
       .mockResolvedValue(createFetchResponse({ id: "1", content: "test" }));
 
-    expect(await fetcher.createTodo("test")).toEqual({
+    expect((await fetcher.createTodo("test")).data).toEqual({
       id: "1",
       content: "test",
     });
@@ -206,8 +233,47 @@ describe("FetcherClient optional headers", () => {
       ctx: "https://example.com",
     });
 
-    const result = await fetchers.getNoHeaderTodo("1");
+    const { data } = await fetchers.getNoHeaderTodo("1");
 
-    expect(result).toEqual("test");
+    expect(data).toEqual("test");
   });
 });
+//
+// describe("use()", () => {
+//   it("should allow to use middleware", async () => {
+//     global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+//
+//     const f = new FetcherClient({
+//       ctx: z.object({
+//         url: z.string().url(),
+//         refreshToken: z.string().optional(),
+//       }),
+//       headers: {
+//         Authorization: z.string().min(1),
+//       },
+//     });
+//
+//     const middleware = (fetcher: any) => {
+//       return (input: any) => {
+//         return fetcher(input).then((res: any) => {
+//           return res + " middleware";
+//         });
+//       };
+//     };
+//
+//     const getTodos = f.use(middleware).fetcher(({ ctx, get }) => {
+//       return get(`${ctx}/todos`, z.array(z.string()));
+//     });
+//
+//     const fetchers = f.combineFetchers({
+//       getTodos,
+//     })({
+//       ctx: { url: "https://example.com", refreshToken: "refresh-token" },
+//       headers: { Authorization: "access-token" },
+//     });
+//
+//     const result = await fetchers.getTodos();
+//
+//     expect(result).toEqual(["test middleware"]);
+//   });
+// });
