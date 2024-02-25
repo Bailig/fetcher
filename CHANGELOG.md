@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.3.0
+
+### Minor Changes
+
+- 1d16282: expose the fetch response and allow updating injected data
+
 ## 0.2.0
 
 ### Minor Changes
