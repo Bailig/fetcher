@@ -62,6 +62,7 @@ const createTodoFetcher = f.combineFetchers({
 });
 
 // Define the context and headers
+// Alternatively, you can use a function that returns the context and headers
 const todoFetcher = createTodoFetcher({
   ctx: "https://example.com", // The type of ctx is inferred from the context schema
   headers: { Authorization: "some-token" }, // The type of headers is inferred from the headers schema
