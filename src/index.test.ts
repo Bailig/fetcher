@@ -94,12 +94,68 @@ describe("fetcher()", () => {
 
 describe("createFetcher()", () => {
   it("should infer ctx and headers types", () => {
-    type Options = Pick<Parameters<typeof createFetcher>[0], "ctx" | "headers">;
+    type Options = Parameters<typeof createFetcher>[0];
 
-    expectTypeOf<Options>().toEqualTypeOf<{
+    type ExpectedOptionsObj = {
       ctx: string;
       headers: { Authorization: string };
-    }>();
+    };
+    type ExpectedOptionsFn = () => ExpectedOptionsObj;
+    type ExpectedOptions = ExpectedOptionsObj | ExpectedOptionsFn;
+
+    expectTypeOf<Options>().toEqualTypeOf<ExpectedOptions>();
+  });
+
+  it("should pass function options to fetcher", async () => {
+    const f = new FetcherClient({
+      ctx: z.string().url(),
+    });
+    const getTodos = f.fetcher(({ ctx, get }) => {
+      expect(ctx).toEqual("https://example.com");
+      return get(`${ctx}/todos`, z.array(z.string()));
+    });
+    const createFetcher = f.combineFetchers({
+      getTodos,
+    });
+    const fetcher = createFetcher(() => ({
+      ctx: "https://example.com",
+    }));
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse(["test"]));
+    await fetcher.getTodos();
+  });
+
+  it("should allow updating options", async () => {
+    global.fetch = vi.fn().mockResolvedValue(createFetchResponse(["test"]));
+
+    const f = new FetcherClient({
+      ctx: z.string().url(),
+      headers: { Authorization: z.string().min(1) },
+    });
+
+    const getTodos = f.fetcher(async ({ ctx, get }) => {
+      expect(ctx).toEqual("https://example.com/2");
+      const result = await get(`${ctx}/todos`, z.array(z.string()));
+      expect(global.fetch).toBeCalledWith("https://example.com/2/todos", {
+        headers: { Authorization: "some-token-2" },
+        referrerPolicy: "no-referrer",
+      });
+      return result;
+    });
+
+    const createFetcher = f.combineFetchers({
+      getTodos,
+    });
+
+    let ctx = "https://example.com";
+    let token = "some-token";
+    const fetcher = createFetcher(() => ({
+      ctx,
+      headers: { Authorization: token },
+    }));
+    ctx = "https://example.com/2";
+    token = "some-token-2";
+
+    await fetcher.getTodos();
   });
 });
 
@@ -238,42 +294,123 @@ describe("FetcherClient optional headers", () => {
     expect(data).toEqual("test");
   });
 });
-//
-// describe("use()", () => {
-//   it("should allow to use middleware", async () => {
-//     global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
-//
-//     const f = new FetcherClient({
-//       ctx: z.object({
-//         url: z.string().url(),
-//         refreshToken: z.string().optional(),
-//       }),
-//       headers: {
-//         Authorization: z.string().min(1),
-//       },
-//     });
-//
-//     const middleware = (fetcher: any) => {
-//       return (input: any) => {
-//         return fetcher(input).then((res: any) => {
-//           return res + " middleware";
-//         });
-//       };
-//     };
-//
-//     const getTodos = f.use(middleware).fetcher(({ ctx, get }) => {
-//       return get(`${ctx}/todos`, z.array(z.string()));
-//     });
-//
-//     const fetchers = f.combineFetchers({
-//       getTodos,
-//     })({
-//       ctx: { url: "https://example.com", refreshToken: "refresh-token" },
-//       headers: { Authorization: "access-token" },
-//     });
-//
-//     const result = await fetchers.getTodos();
-//
-//     expect(result).toEqual(["test middleware"]);
-//   });
-// });
+
+describe("Refresh token", () => {
+  const authFetcher = new FetcherClient({
+    ctx: z.string().url(),
+  });
+  const refreshTokens = authFetcher.fetcher(
+    async (
+      { ctx, post },
+      refreshToken: string
+    ): Promise<{ token: string } | { error: string }> => {
+      const { data, response } = await post(`${ctx}/refresh`, z.string(), {
+        refreshToken,
+      });
+      if (response.status !== 200) {
+        return { error: "refresh token failed" };
+      }
+      return { token: data };
+    }
+  );
+
+  const createAuthFetcher = authFetcher.combineFetchers({
+    refreshTokens,
+  });
+
+  const authFetchers = createAuthFetcher({
+    ctx: "https://example.com",
+  });
+
+  it("should be able to refresh token", async () => {
+    const f = new FetcherClient({
+      ctx: z.object({
+        url: z.string().url(),
+        refreshToken: z.string(),
+      }),
+      headers: {
+        Authorization: z.string().min(1),
+      },
+    });
+
+    type HandleFetch<TData> = (token: string) => Promise<{
+      data: TData;
+      response: Response;
+      token?: string;
+    }>;
+    const refreshTokenAndRefetch = async <TData>({
+      refreshToken,
+      accessToken,
+
+      handleFetch,
+    }: {
+      refreshToken: string;
+      accessToken: string;
+      handleFetch: HandleFetch<TData>;
+    }) => {
+      const { data, response } = await handleFetch(accessToken);
+      if (response.status !== 401) {
+        return { data, response };
+      }
+
+      const refreshTokenResult = await authFetchers.refreshTokens(refreshToken);
+      if ("error" in refreshTokenResult) {
+        return refreshTokenResult;
+      }
+      const { data: _data, response: _response } = await handleFetch(
+        refreshTokenResult.token
+      );
+      return {
+        data: _data,
+        token: refreshTokenResult.token,
+        response: _response,
+      };
+    };
+
+    const getTodos = f.fetcher(async ({ ctx, get, ...others }) => {
+      const result = await refreshTokenAndRefetch({
+        refreshToken: ctx.refreshToken,
+        accessToken: others.headers.Authorization,
+        handleFetch: (token) =>
+          get(`${ctx}/todos`, z.array(z.string()), {
+            headers: { Authorization: token },
+          }),
+      });
+      if ("error" in result) {
+        return result;
+      }
+      return { todos: result.data, token: result.token };
+    });
+
+    const createFetchers = f.combineFetchers({
+      getTodos,
+    });
+
+    const fetchers = createFetchers({
+      ctx: { url: "https://example.com", refreshToken: "refresh-token" },
+      headers: { Authorization: "access-token" },
+    });
+
+    global.fetch = vi.fn().mockResolvedValueOnce(createFetchResponse(["test"]));
+
+    const result = await fetchers.getTodos();
+    expect(result).toEqual({ todos: ["test"] });
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(createFetchResponse(["test"], 401))
+      .mockResolvedValueOnce(createFetchResponse("token"))
+      .mockResolvedValueOnce(createFetchResponse(["test"]));
+
+    const refreshSuccessResult = await fetchers.getTodos();
+    expect(refreshSuccessResult).toEqual({ todos: ["test"], token: "token" });
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(createFetchResponse(["test"], 401))
+      .mockResolvedValueOnce(createFetchResponse("token", 401));
+
+    const refreshFailResult = await fetchers.getTodos();
+    expect(refreshFailResult).toEqual({ error: "refresh token failed" });
+  });
+});

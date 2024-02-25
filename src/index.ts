@@ -82,36 +82,38 @@ export class FetcherClient<
       FetcherDefinition<TContextSchema, THeadersShape>
     >
   >(fetcherDefs: TFetchers) {
-    return (
-      options: THeadersShape extends ZodRawShape
-        ? {
-            ctx: z.infer<TContextSchema>;
-            headers: InferZodRawShape<THeadersShape>;
-          }
-        : {
-            ctx: z.infer<TContextSchema>;
-          }
-    ): MapFetchers<TFetchers> => {
-      const ctx = this.ctxSchema.parse(options.ctx);
+    type OptionsObj = THeadersShape extends ZodRawShape
+      ? {
+          ctx: z.infer<TContextSchema>;
+          headers: InferZodRawShape<THeadersShape>;
+        }
+      : {
+          ctx: z.infer<TContextSchema>;
+        };
+    type OptionsFn = () => OptionsObj;
 
-      const headers: any =
-        this.headersShape && "headers" in options
-          ? z.object(this.headersShape).parse(options.headers)
-          : undefined;
-
-      const get = this.createGet(headers);
-      const post = this.createPost(headers);
-      const patch = this.createPatch(headers);
-      const put = this.createPut(headers);
-      const del = this.createDelete(headers);
-
+    return (options: OptionsObj | OptionsFn): MapFetchers<TFetchers> => {
       const fetchers = Object.entries(fetcherDefs).reduce(
         (acc, [key, fetcher]) => {
-          acc[key] = (input: any) =>
-            fetcher(
+          acc[key] = (input: any) => {
+            const opts = typeof options === "function" ? options() : options;
+            const ctx = this.ctxSchema.parse(opts.ctx);
+
+            const headers: any =
+              this.headersShape && "headers" in opts
+                ? z.object(this.headersShape).parse(opts.headers)
+                : undefined;
+
+            const get = this.createGet(headers);
+            const post = this.createPost(headers);
+            const patch = this.createPatch(headers);
+            const put = this.createPut(headers);
+            const del = this.createDelete(headers);
+            return fetcher(
               { ctx, headers, get, post, patch, put, delete: del } as any,
               input
             );
+          };
           return acc;
         },
         {} as any
