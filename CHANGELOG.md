@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.3.1
+
+### Patch Changes
+
+- f95aefa: added postProcess onError hook
+
 ## 0.3.0
 
 ### Minor Changes
