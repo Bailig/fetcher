@@ -95,15 +95,45 @@ describe("fetcher()", () => {
 describe("createFetcher()", () => {
   it("should infer ctx and headers types", () => {
     type Options = Parameters<typeof createFetcher>[0];
+    type OptionsObj = Extract<Options, { ctx: any }>;
+    type OptionsFn = Extract<Options, () => any>;
 
-    type ExpectedOptionsObj = {
+    expectTypeOf<OptionsObj>().toEqualTypeOf<ReturnType<OptionsFn>>;
+    expectTypeOf<Omit<OptionsObj, "postProcess">>().toEqualTypeOf<{
       ctx: string;
       headers: { Authorization: string };
-    };
-    type ExpectedOptionsFn = () => ExpectedOptionsObj;
-    type ExpectedOptions = ExpectedOptionsObj | ExpectedOptionsFn;
+    }>();
+    type OnErrorReturnType = ReturnType<
+      NonNullable<NonNullable<OptionsObj["postProcess"]>["onError"]>
+    >;
+    expectTypeOf<OnErrorReturnType>().toEqualTypeOf<
+      | ReturnType<typeof getTodos | typeof getTodo | typeof createTodo>
+      | Promise<void | undefined>
+      | undefined
+      | void
+    >();
 
-    expectTypeOf<Options>().toEqualTypeOf<ExpectedOptions>();
+    createFetcher(() => ({
+      ctx: "https://example.com",
+      headers: { Authorization: "some-token" },
+      postProcess: {
+        onError: async ({ options, input, error, fetcher, fetcherName }) => {
+          expectTypeOf(options["ctx"]).toEqualTypeOf<string>();
+          expectTypeOf(options["headers"]).toEqualTypeOf<{
+            Authorization: string;
+          }>();
+          expectTypeOf(input).toEqualTypeOf<string | undefined>();
+          expectTypeOf(error).toEqualTypeOf<unknown>();
+          expectTypeOf(fetcher).toEqualTypeOf<
+            typeof getTodos | typeof getTodo | typeof createTodo
+          >();
+          expectTypeOf(fetcherName).toEqualTypeOf<
+            "getTodos" | "getTodo" | "createTodo"
+          >();
+          return;
+        },
+      },
+    }));
   });
 
   it("should pass function options to fetcher", async () => {
@@ -171,7 +201,7 @@ describe("fetcher.getTodos()", () => {
   });
 
   it("should call global.fetch with correct url and headers", async () => {
-    global.fetch = vi.fn().mockResolvedValue(createFetchResponse(["test"]));
+    global.fetch = vi.fn().mockResolvedValueOnce(createFetchResponse(["test"]));
     await fetcher.getTodos();
     expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos", {
       headers: { Authorization: "some-token" },
@@ -192,7 +222,7 @@ describe("fetcher.getTodo()", () => {
   });
 
   it("should call global.fetch with correct url and headers", async () => {
-    global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+    global.fetch = vi.fn().mockResolvedValueOnce(createFetchResponse("test"));
 
     await fetcher.getTodo("1");
     expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos/1", {
@@ -202,7 +232,7 @@ describe("fetcher.getTodo()", () => {
   });
 
   it("should return correct data", async () => {
-    global.fetch = vi.fn().mockResolvedValue(createFetchResponse("test"));
+    global.fetch = vi.fn().mockResolvedValueOnce(createFetchResponse("test"));
 
     expect((await fetcher.getTodo("1")).data).toEqual("test");
   });
@@ -210,7 +240,7 @@ describe("fetcher.getTodo()", () => {
   it("should throw error if response data shape is wrong", async () => {
     global.fetch = vi
       .fn()
-      .mockResolvedValue(createFetchResponse({ content: "test" }));
+      .mockResolvedValueOnce(createFetchResponse({ content: "test" }));
     expect(() => fetcher.getTodo("1")).rejects.toThrow();
   });
 });
@@ -229,9 +259,10 @@ describe("fetcher.createTodo()", () => {
   it("should call global.fetch with correct url and headers", async () => {
     global.fetch = vi
       .fn()
-      .mockResolvedValue(createFetchResponse({ id: "1", content: "test" }));
+      .mockResolvedValueOnce(createFetchResponse({ id: "1", content: "test" }));
 
     await fetcher.createTodo("test");
+
     expect(global.fetch).toHaveBeenCalledWith("https://example.com/todos", {
       headers: {
         Authorization: "some-token",
@@ -247,7 +278,7 @@ describe("fetcher.createTodo()", () => {
   it("should return correct data", async () => {
     global.fetch = vi
       .fn()
-      .mockResolvedValue(createFetchResponse({ id: "1", content: "test" }));
+      .mockResolvedValueOnce(createFetchResponse({ id: "1", content: "test" }));
 
     expect((await fetcher.createTodo("test")).data).toEqual({
       id: "1",
@@ -258,7 +289,7 @@ describe("fetcher.createTodo()", () => {
   it("should throw error if response data shape is wrong", async () => {
     global.fetch = vi
       .fn()
-      .mockResolvedValue(createFetchResponse({ content: "test" }));
+      .mockResolvedValueOnce(createFetchResponse({ content: "test" }));
     expect(() => fetcher.createTodo("test")).rejects.toThrow();
   });
 });
@@ -412,5 +443,126 @@ describe("Refresh token", () => {
 
     const refreshFailResult = await fetchers.getTodos();
     expect(refreshFailResult).toEqual({ error: "refresh token failed" });
+  });
+
+  it("should be able to refresh token with a postProcess onError", async () => {
+    const TOKEN_EXPIRED = "token-expired";
+    const NEW_TOKEN = "new-token";
+    const OLD_TOKEN = "old-token";
+
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(createFetchResponse({ code: TOKEN_EXPIRED }, 401))
+      .mockResolvedValueOnce(createFetchResponse(NEW_TOKEN))
+      .mockResolvedValueOnce(createFetchResponse("test"));
+
+    const f = new FetcherClient({
+      ctx: z.object({
+        url: z.string().url(),
+        refreshToken: z.string(),
+      }),
+      headers: {
+        Authorization: z.string().min(1),
+      },
+    });
+
+    const getTodo = f.fetcher(async ({ ctx, get }, id: string) => {
+      const { data, response } = await get(
+        `${ctx.url}/todos/${id}`,
+        z.union([z.object({ code: z.string() }), z.string()])
+      );
+      if (
+        response.status === 401 &&
+        typeof data === "object" &&
+        "code" in data &&
+        data.code === TOKEN_EXPIRED
+      ) {
+        throw new Error(data.code);
+      }
+      return { data, response };
+    });
+
+    const getTodos = f.fetcher(async ({ ctx, get }) => {
+      const { data, response } = await get(`${ctx.url}/todos`, z.string());
+      return { data, response };
+    });
+
+    const createTodo = f.fetcher(
+      async ({ ctx, post }, todo: { content: string }) => {
+        const { data, response } = await post(
+          `${ctx.url}/todos`,
+          z.string(),
+          todo
+        );
+        return { data, response };
+      }
+    );
+
+    const createFetchers = f.combineFetchers({
+      getTodo,
+      getTodos,
+      createTodo,
+    });
+
+    let token = OLD_TOKEN;
+    const refreshTokensRetryCounts = new Map<string, number>();
+    const fetchers = createFetchers(() => ({
+      ctx: { url: "https://example.com", refreshToken: "refresh-token" },
+      headers: { Authorization: token },
+      postProcess: {
+        onError: async ({ options, input, error, fetcher, fetcherName }) => {
+          if (refreshTokensRetryCounts.get(fetcherName) === 2) {
+            throw new Error(
+              `Refresh token failed when calling: ${fetcherName}`
+            );
+          }
+          if (error instanceof Error && error.message === TOKEN_EXPIRED) {
+            refreshTokensRetryCounts.set(
+              fetcherName,
+              (refreshTokensRetryCounts.get(fetcherName) ?? 0) + 1
+            );
+            const refreshTokenResult = await authFetchers.refreshTokens(
+              options.ctx.refreshToken
+            );
+            if ("error" in refreshTokenResult) {
+              throw new Error(refreshTokenResult.error);
+            }
+            token = refreshTokenResult.token;
+            fetcher(options, input as any);
+          }
+          return;
+        },
+      },
+    }));
+
+    await fetchers.getTodo("1");
+    expect(global.fetch).toBeCalledTimes(3);
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      "https://example.com/todos/1",
+      {
+        headers: { Authorization: OLD_TOKEN },
+        referrerPolicy: "no-referrer",
+      }
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      2,
+      "https://example.com/refresh",
+      {
+        headers: { "Content-Type": "application/json; charset=UTF-8" },
+        method: "POST",
+        body: JSON.stringify({ refreshToken: "refresh-token" }),
+        cache: "no-cache",
+        referrerPolicy: "no-referrer",
+      }
+    );
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      3,
+      "https://example.com/todos/1",
+      {
+        headers: { Authorization: NEW_TOKEN },
+        referrerPolicy: "no-referrer",
+      }
+    );
   });
 });

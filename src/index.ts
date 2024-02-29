@@ -45,6 +45,38 @@ export type FetcherDefinition<
     ) => TOutput
   : "Inputs must be 0 or 1";
 
+export type PostProcess<
+  TContextSchema extends ZodTypeAny,
+  TOptions extends
+    | { ctx: ZodTypeAny }
+    | { ctx: ZodTypeAny; headers: ZodRawShape },
+  THeadersShape extends TOptions extends { headers: ZodRawShape }
+    ? TOptions["headers"]
+    : undefined,
+  TFetchers extends Record<
+    string,
+    FetcherDefinition<TContextSchema, THeadersShape>
+  >
+> = {
+  onError?: ({
+    options,
+    input,
+    error,
+    fetcher,
+    fetcherName,
+  }: {
+    options: Parameters<TFetchers[keyof TFetchers]>[0];
+    input: Parameters<TFetchers[keyof TFetchers]>[1];
+    error: unknown;
+    fetcher: TFetchers[keyof TFetchers];
+    fetcherName: Keys<TFetchers>;
+  }) =>
+    | ReturnType<TFetchers[keyof TFetchers]>
+    | Promise<undefined | void>
+    | void
+    | undefined;
+};
+
 export class FetcherClient<
   TOptions extends
     | { ctx: ZodTypeAny }
@@ -86,33 +118,73 @@ export class FetcherClient<
       ? {
           ctx: z.infer<TContextSchema>;
           headers: InferZodRawShape<THeadersShape>;
+          postProcess?: PostProcess<
+            TContextSchema,
+            TOptions,
+            THeadersShape,
+            TFetchers
+          >;
         }
       : {
           ctx: z.infer<TContextSchema>;
+          postProcess?: PostProcess<
+            TContextSchema,
+            TOptions,
+            THeadersShape,
+            TFetchers
+          >;
         };
+
     type OptionsFn = () => OptionsObj;
 
     return (options: OptionsObj | OptionsFn): MapFetchers<TFetchers> => {
       const fetchers = Object.entries(fetcherDefs).reduce(
         (acc, [key, fetcher]) => {
-          acc[key] = (input: any) => {
+          acc[key] = async (input: any) => {
             const opts = typeof options === "function" ? options() : options;
             const ctx = this.ctxSchema.parse(opts.ctx);
 
-            const headers: any =
-              this.headersShape && "headers" in opts
-                ? z.object(this.headersShape).parse(opts.headers)
-                : undefined;
-
-            const get = this.createGet(headers);
-            const post = this.createPost(headers);
-            const patch = this.createPatch(headers);
-            const put = this.createPut(headers);
-            const del = this.createDelete(headers);
-            return fetcher(
-              { ctx, headers, get, post, patch, put, delete: del } as any,
-              input
+            const get = this.createGet(() =>
+              this.getHeadersFromOptions(options)
             );
+            const post = this.createPost(() =>
+              this.getHeadersFromOptions(options)
+            );
+            const patch = this.createPatch(() =>
+              this.getHeadersFromOptions(options)
+            );
+            const put = this.createPut(() =>
+              this.getHeadersFromOptions(options)
+            );
+            const del = this.createDelete(() =>
+              this.getHeadersFromOptions(options)
+            );
+
+            const fetcherOpts = {
+              ctx,
+              headers: this.getHeadersFromOptions(options),
+              get,
+              post,
+              patch,
+              put,
+              delete: del,
+            } as any;
+
+            try {
+              const result = await fetcher(fetcherOpts, input);
+              return result;
+            } catch (error) {
+              if (opts.postProcess?.onError) {
+                return opts.postProcess.onError({
+                  options: fetcherOpts,
+                  input,
+                  error,
+                  fetcher: fetcher as any,
+                  fetcherName: key as Keys<TFetchers>,
+                });
+              }
+              throw error;
+            }
           };
           return acc;
         },
@@ -123,17 +195,25 @@ export class FetcherClient<
     };
   }
 
+  private getHeadersFromOptions = <TOptions>(options: TOptions) => {
+    const opts = typeof options === "function" ? options() : options;
+
+    const headers =
+      this.headersShape && "headers" in opts
+        ? z.object(this.headersShape).parse(opts.headers)
+        : undefined;
+    return headers;
+  };
+
   private createGet = (
-    headers: THeadersShape extends never
-      ? never
-      : InferZodRawShape<NonNullable<THeadersShape>>
+    getHeaders: () => Record<string, string> | void
   ): Query => {
     const get: Query = async (url, schema, options) => {
       const response = await fetch(url, {
         referrerPolicy: "no-referrer",
         ...options,
         headers: {
-          ...headers,
+          ...(getHeaders() ?? {}),
           ...options?.headers,
         },
       });
@@ -143,9 +223,7 @@ export class FetcherClient<
   };
 
   private createPost = (
-    headers: THeadersShape extends unknown
-      ? unknown
-      : InferZodRawShape<NonNullable<THeadersShape>>
+    getHeaders: () => Record<string, string> | void
   ): Mutation => {
     const post: Mutation = async (url, schema, data, options) => {
       const response = await fetch(url, {
@@ -156,7 +234,7 @@ export class FetcherClient<
         ...options,
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
-          ...(headers as any),
+          ...(getHeaders() ?? {}),
           ...options?.headers,
         },
       });
@@ -166,9 +244,7 @@ export class FetcherClient<
   };
 
   private createPatch = (
-    headers: THeadersShape extends unknown
-      ? unknown
-      : InferZodRawShape<NonNullable<THeadersShape>>
+    getHeaders: () => Record<string, string> | void
   ): Mutation => {
     const patch: Mutation = async (url, schema, data, options) => {
       const response = await fetch(url, {
@@ -179,7 +255,7 @@ export class FetcherClient<
         ...options,
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
-          ...(headers as any),
+          ...(getHeaders() ?? {}),
           ...options?.headers,
         },
       });
@@ -189,9 +265,7 @@ export class FetcherClient<
   };
 
   private createPut = (
-    headers: THeadersShape extends unknown
-      ? unknown
-      : InferZodRawShape<NonNullable<THeadersShape>>
+    getHeaders: () => Record<string, string> | void
   ): Mutation => {
     const put: Mutation = async (url, schema, data, options) => {
       const response = await fetch(url, {
@@ -202,7 +276,7 @@ export class FetcherClient<
         ...options,
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
-          ...(headers as any),
+          ...(getHeaders() ?? {}),
           ...options?.headers,
         },
       });
@@ -212,9 +286,7 @@ export class FetcherClient<
   };
 
   private createDelete = (
-    headers: THeadersShape extends unknown
-      ? unknown
-      : InferZodRawShape<NonNullable<THeadersShape>>
+    getHeaders: () => Record<string, string> | void
   ): Mutation => {
     const del: Mutation = async (url, schema, data, options) => {
       const response = await fetch(url, {
@@ -225,7 +297,7 @@ export class FetcherClient<
         ...options,
         headers: {
           "Content-Type": "application/json; charset=UTF-8",
-          ...(headers as any),
+          ...(getHeaders() ?? {}),
           ...options?.headers,
         },
       });
@@ -260,3 +332,5 @@ type ArrayShorterThanTwo<T extends any[]> = T extends [
   : T extends []
   ? true
   : never;
+
+type Keys<T> = T extends Record<infer K, any> ? K : never;
