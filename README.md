@@ -117,3 +117,67 @@ const TodoForm = () => {
   );
 };
 ```
+
+## Using `postProcess` to refresh token
+
+```ts
+const f = new FetcherClient({
+  ctx: z.object({
+    url: z.string().url(),
+    refreshToken: z.string(),
+  }),
+  headers: {
+    Authorization: z.string().min(1),
+  },
+});
+
+const getTodo = f.fetcher(async ({ ctx, get }, id: string) => {
+  const { data, response } = await get(
+    `${ctx.url}/todos/${id}`,
+    z.union([z.object({ code: z.string() }), z.string()])
+  );
+  if (
+    response.status === 401 &&
+    typeof data === "object" &&
+    "code" in data &&
+    data.code === "token-expired"
+  ) {
+    // throw error to trigger onError
+    throw new Error(data.code);
+  }
+  return { data, response };
+});
+
+const createFetchers = f.combineFetchers({
+  getTodo,
+});
+
+let token = "old-token";
+const refreshTokensRetryCounts = new Map<string, number>();
+
+const fetchers = createFetchers(() => ({
+  ctx: { url: "https://example.com", refreshToken: "refresh-token" },
+  headers: { Authorization: token },
+  postProcess: {
+    // when your fetcher throw an error, it will call this function with the error and original fetcher function and input
+    onError: async ({ options, input, error, fetcher, fetcherName }) => {
+      if (refreshTokensRetryCounts.get(fetcherName) === 2) {
+        throw new Error(`Refresh token failed when calling: ${fetcherName}`);
+      }
+      // if the error is token expired, we will refresh the token and retry the original fetcher
+      if (error instanceof Error && error.message === "token-expired") {
+        refreshTokensRetryCounts.set(
+          fetcherName,
+          (refreshTokensRetryCounts.get(fetcherName) ?? 0) + 1
+        );
+        // get new token and update token
+        token = await refreshTokens(options.ctx.refreshToken);
+        await fetcher(options, input as any);
+      }
+      return;
+    },
+  },
+}));
+
+await fetchers.getTodo("1");
+```
