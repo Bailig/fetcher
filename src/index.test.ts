@@ -528,7 +528,7 @@ describe("Refresh token", () => {
               throw new Error(refreshTokenResult.error);
             }
             token = refreshTokenResult.token;
-            fetcher(options, input as any);
+            return await fetcher(options, input as any);
           }
           return;
         },

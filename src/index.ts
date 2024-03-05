@@ -71,8 +71,9 @@ export type PostProcess<
     fetcher: TFetchers[keyof TFetchers];
     fetcherName: Keys<TFetchers>;
   }) =>
-    | ReturnType<TFetchers[keyof TFetchers]>
-    | Promise<undefined | void>
+    | Promise<
+        Awaited<ReturnType<TFetchers[keyof TFetchers]>> | undefined | void
+      >
     | void
     | undefined;
 };
