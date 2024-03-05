@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.3.2
+
+### Patch Changes
+
+- be75704: fixed onError postProcess return type
+
 ## 0.3.1
 
 ### Patch Changes
