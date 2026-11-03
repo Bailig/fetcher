@@ -107,8 +107,13 @@ describe("createFetcher()", () => {
       NonNullable<NonNullable<OptionsObj["postProcess"]>["onError"]>
     >;
     expectTypeOf<OnErrorReturnType>().toEqualTypeOf<
-      | ReturnType<typeof getTodos | typeof getTodo | typeof createTodo>
-      | Promise<void | undefined>
+      | Promise<
+          | Awaited<
+              ReturnType<typeof getTodos | typeof getTodo | typeof createTodo>
+            >
+          | undefined
+          | void
+        >
       | undefined
       | void
     >();
