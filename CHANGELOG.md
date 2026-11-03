@@ -1,5 +1,11 @@
 # @blg/fetcher
 
+## 0.3.3
+
+### Patch Changes
+
+- 8c76230: allow zod v4 as peer dependency
+
 ## 0.3.2
 
 ### Patch Changes
